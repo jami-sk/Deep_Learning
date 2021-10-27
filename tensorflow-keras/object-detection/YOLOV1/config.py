@@ -1,3 +1,5 @@
+__all__ = ['config']
+
 config = dict()
 config['image_size'] = (448, 448)
 config['grid_size'] = (7, 7)

@@ -1,14 +1,12 @@
+__all__ = ['YoloV1', 'YoloReshape']
+
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.layers import Conv2D, BatchNormalization, LeakyReLU, MaxPooling2D, Input, Dense, Flatten, Dropout
 from tensorflow.keras.regularizers import l2
 import tensorflow.keras.backend as K
-from glob import glob
-from tqdm import tqdm
 import numpy as np
-import xml.etree.ElementTree as elementTree
-import json
 import os
 
 from config import config
@@ -16,11 +14,12 @@ from config import config
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 print(f"Tensorflow Version: {tf.__version__}")
 
+YOLO_CONFIG = config
+
 class YoloV1():
-    def __init__(self, config):
+    def __init__(self):
         super(YoloV1, self).__init__()
-        self.config = config
-        self.architecture = config['model_arch']
+        self.architecture = YOLO_CONFIG['model_arch']
 
     def cnn_block(self, x, kernel_size, nfilters, stride, padding):
         x = Conv2D(filters=nfilters, kernel_size=kernel_size, padding=padding, strides=stride,
@@ -49,18 +48,17 @@ class YoloV1():
 
 
 class YoloReshape(tf.keras.layers):
-    def __init__(self, config):
+    def __init__(self):
         super(YoloReshape, self).__init__()
-        self.target_shape = config['output_shape']
-        self.config = config
+        self.target_shape = YOLO_CONFIG['output_shape']
 
     def __call__(self, input):
         # get_grid size
         S = [self.target_shape[0], self.target_shape[1]]
         # classes
-        C = self.config['n_classes']
+        C = config['n_classes']
         # boxes
-        B = self.config['n_boxes']
+        B = config['n_boxes']
 
         idx1 = S[0] * S[1] * C  # each block first C values
         idx2 = idx1 + S[0]*S[1]*B
@@ -86,6 +84,9 @@ class YoloLoss:
         super(YoloLoss, self).__init__()
         self.y_pred = y_pred
         self.y_true = y_true
+        self.C = YOLO_CONFIG['n_classes']
+        self.S = YOLO_CONFIG['grid_size'][0]
+        self.B = YOLO_CONFIG['n_boxes']
 
     def xywh2minmax(self, xy, wh):
         xy_min = xy - wh / 2
@@ -133,14 +134,14 @@ class YoloLoss:
         return box_xy, box_wh
 
     def __call__(self):
-        label_class = self.y_true[..., :20]  # ? * 7 * 7 * 20
-        label_box = self.y_true[..., 22:24]  # ? * 7 * 7 * 4
-        response_mask = self.y_true[..., 24]  # ? * 7 * 7
+        label_class = self.y_true[..., :self.C]  # ? * 7 * 7 * C
+        label_box = self.y_true[..., self.C+self.B:self.C+self.B+4]  # ? * 7 * 7 * 4
+        response_mask = self.y_true[..., self.C]  # ? * 7 * 7
         response_mask = K.expand_dims(response_mask)  # ? * 7 * 7 * 1
 
-        predict_class = self.y_pred[..., :20]  # ? * 7 * 7 * 20
-        predict_trust = self.y_pred[..., 20:22]  # ? * 7 * 7 * 2
-        predict_box = self.y_pred[..., 22:]  # ? * 7 * 7 * 8
+        predict_class = self.y_pred[..., :self.C]  # ? * 7 * 7 * 20
+        predict_trust = self.y_pred[..., self.C:self.C+self.B]  # ? * 7 * 7 * 2
+        predict_box = self.y_pred[..., self.C+self.B:]  # ? * 7 * 7 * 8
 
         _label_box = K.reshape(label_box, [-1, 7, 7, 1, 4])
         _predict_box = K.reshape(predict_box, [-1, 7, 7, 2, 4])
