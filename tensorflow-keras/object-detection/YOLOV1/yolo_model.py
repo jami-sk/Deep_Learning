@@ -1,28 +1,26 @@
 __all__ = ['YoloV1', 'YoloReshape']
 
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.layers import Conv2D, BatchNormalization, LeakyReLU, MaxPooling2D, Input, Dense, Flatten, Dropout
 from tensorflow.keras.regularizers import l2
 import tensorflow.keras.backend as K
-import numpy as np
 import os
 
 from config import config
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 print(f"Tensorflow Version: {tf.__version__}")
-
 YOLO_CONFIG = config
 
-class YoloV1():
+
+class YoloV1:
     def __init__(self):
         super(YoloV1, self).__init__()
         self.architecture = YOLO_CONFIG['model_arch']
 
-    def cnn_block(self, x, kernel_size, nfilters, stride, padding):
-        x = Conv2D(filters=nfilters, kernel_size=kernel_size, padding=padding, strides=stride,
+    @staticmethod
+    def cnn_block(x, kernel_size, n_filters, stride, padding):
+        x = Conv2D(filters=n_filters, kernel_size=kernel_size, padding=padding, strides=stride,
                    kernel_initializer='he_normal', kernel_regularizer=l2(5e-4))(x)
         x = BatchNormalization()(x)
         x = LeakyReLU(alpha=0.1)(x)
@@ -37,9 +35,11 @@ class YoloV1():
             elif block[0] == 'Max':
                 x = MaxPooling2D(pool_size=block[1], strides=block[2], padding=block[3])(x)
         x = Flatten()(x)
+        x = self.add_fc_layers(x)
         return x
 
-    def add_fc_layers(self, x, output_shape):
+    @staticmethod
+    def add_fc_layers(x):
         x = Dense(512, linear=False)(x)
         x = Dense(5096, linear=False)(x)
         x = Dropout(0.5)(x)
@@ -51,49 +51,50 @@ class YoloReshape(tf.keras.layers):
     def __init__(self):
         super(YoloReshape, self).__init__()
         self.target_shape = YOLO_CONFIG['output_shape']
+        self.S = [self.target_shape[0], self.target_shape[1]]
+        self.C = config['n_classes']
+        self.B = config['n_boxes']
 
-    def __call__(self, input):
-        # get_grid size
-        S = [self.target_shape[0], self.target_shape[1]]
-        # classes
-        C = config['n_classes']
-        # boxes
-        B = config['n_boxes']
-
-        idx1 = S[0] * S[1] * C  # each block first C values
-        idx2 = idx1 + S[0]*S[1]*B
+    def __call__(self, inputs):
+        idx1 = self.S[0] * self.S[1] * self.C  # each block first C values
+        idx2 = idx1 + self.S[0]*self.S[1]*self.B
 
         # class probabilities
-        class_prob = K.reshape(input[:, :idx1], (K.shape(input)[0], ) + tuple(S[0], S[1], C))
+        class_prob = K.reshape(inputs[:, :idx1], (K.shape(inputs)[0], *self.S, self.C))
         class_prob = K.softmax(class_prob)
 
         # confidence
-        confs = K.reshape(input[:, idx1:idx2], (K.shape(input)[0], ) + tuple(S[0], S[1], B))
-        confs = K.sigmoid(confs)
+        conf = K.reshape(inputs[:, idx1:idx2], (K.shape(inputs)[0], *self.S, self.B))
+        conf = K.sigmoid(conf)
 
         # Boxes
-        boxes = K.reshape(input[:, idx2:], (K.shape(input)[0], ) + tuple(S[0], S[1], B*4))
+        boxes = K.reshape(inputs[:, idx2:], (K.shape(inputs)[0], *self.S, self.B*4))
 
-        outputs = K.concatenate([class_prob, confs, boxes])
+        outputs = K.concatenate([class_prob, conf, boxes])
 
         return outputs
 
 
 class YoloLoss:
-    def __init__(self, y_true, y_pred):
+    def __init__(self, y_true, y_predict):
         super(YoloLoss, self).__init__()
-        self.y_pred = y_pred
+        self.y_predict = y_predict
         self.y_true = y_true
         self.C = YOLO_CONFIG['n_classes']
         self.S = YOLO_CONFIG['grid_size'][0]
         self.B = YOLO_CONFIG['n_boxes']
+        self.img_size = YOLO_CONFIG['new_size']
+        self.lambda_coord = 5
+        self.lambda_noobj = 0.5
 
-    def xywh2minmax(self, xy, wh):
+    @staticmethod
+    def get_min_maxes(xy, wh):
         xy_min = xy - wh / 2
         xy_max = xy + wh / 2
         return xy_min, xy_max
 
-    def iou(self, pred_mins, pred_maxes, true_mins, true_maxes):
+    @staticmethod
+    def iou(pred_mins, pred_maxes, true_mins, true_maxes):
         intersect_mins = K.maximum(pred_mins, true_mins)
         intersect_maxes = K.minimum(pred_maxes, true_maxes)
         intersect_wh = K.maximum(intersect_maxes - intersect_mins, 0.)
@@ -109,7 +110,8 @@ class YoloLoss:
 
         return iou_scores
 
-    def yolo_head(self, feats):
+    @staticmethod
+    def yolo_head(feats):
         # Dynamic implementation of conv dims for fully convolutional model.
         conv_dims = K.shape(feats)[1:3]  # assuming channels last
         # In YOLO the height index is the inner most iteration.
@@ -139,9 +141,9 @@ class YoloLoss:
         response_mask = self.y_true[..., self.C]  # ? * 7 * 7
         response_mask = K.expand_dims(response_mask)  # ? * 7 * 7 * 1
 
-        predict_class = self.y_pred[..., :self.C]  # ? * 7 * 7 * 20
-        predict_trust = self.y_pred[..., self.C:self.C+self.B]  # ? * 7 * 7 * 2
-        predict_box = self.y_pred[..., self.C+self.B:]  # ? * 7 * 7 * 8
+        predict_class = self.y_predict[..., :self.C]  # ? * 7 * 7 * 20
+        predict_trust = self.y_predict[..., self.C:self.C+self.B]  # ? * 7 * 7 * 2
+        predict_box = self.y_predict[..., self.C+self.B:]  # ? * 7 * 7 * 8
 
         _label_box = K.reshape(label_box, [-1, 7, 7, 1, 4])
         _predict_box = K.reshape(predict_box, [-1, 7, 7, 2, 4])
@@ -149,12 +151,14 @@ class YoloLoss:
         label_xy, label_wh = self.yolo_head(_label_box)  # ? * 7 * 7 * 1 * 2, ? * 7 * 7 * 1 * 2
         label_xy = K.expand_dims(label_xy, 3)  # ? * 7 * 7 * 1 * 1 * 2
         label_wh = K.expand_dims(label_wh, 3)  # ? * 7 * 7 * 1 * 1 * 2
-        label_xy_min, label_xy_max = self.xywh2minmax(label_xy, label_wh)  # ? * 7 * 7 * 1 * 1 * 2, ? * 7 * 7 * 1 * 1 * 2
+        label_xy_min, label_xy_max = self.get_min_maxes(label_xy, label_wh)
+        # ? * 7 * 7 * 1 * 1 * 2, ? * 7 * 7 * 1 * 1 * 2
 
         predict_xy, predict_wh = self.yolo_head(_predict_box)  # ? * 7 * 7 * 2 * 2, ? * 7 * 7 * 2 * 2
         predict_xy = K.expand_dims(predict_xy, 4)  # ? * 7 * 7 * 2 * 1 * 2
         predict_wh = K.expand_dims(predict_wh, 4)  # ? * 7 * 7 * 2 * 1 * 2
-        predict_xy_min, predict_xy_max = self.xywh2minmax(predict_xy, predict_wh)  # ? * 7 * 7 * 2 * 1 * 2, ? * 7 * 7 * 2 * 1 * 2
+        predict_xy_min, predict_xy_max = self.get_min_maxes(predict_xy, predict_wh)
+        # ? * 7 * 7 * 2 * 1 * 2, ? * 7 * 7 * 2 * 1 * 2
 
         iou_scores = self.iou(predict_xy_min, predict_xy_max, label_xy_min, label_xy_max)  # ? * 7 * 7 * 2 * 1
         best_ious = K.max(iou_scores, axis=4)  # ? * 7 * 7 * 2
@@ -179,20 +183,10 @@ class YoloLoss:
         box_mask = K.expand_dims(box_mask)
         response_mask = K.expand_dims(response_mask)
 
-        box_loss = 5 * box_mask * response_mask * K.square((label_xy - predict_xy) / 448)
-        box_loss += 5 * box_mask * response_mask * K.square((K.sqrt(label_wh) - K.sqrt(predict_wh)) / 448)
+        box_loss = 5 * box_mask * response_mask * K.square((label_xy - predict_xy) / self.img_size[0])
+        box_loss += 5 * box_mask * response_mask * K.square((K.sqrt(label_wh) - K.sqrt(predict_wh)) / self.img_size[0])
         box_loss = K.sum(box_loss)
 
         loss = confidence_loss + class_loss + box_loss
 
         return loss
-
-
-
-
-
-
-
-
-
-

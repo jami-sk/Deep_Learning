@@ -2,6 +2,7 @@ __all__ = ['config']
 
 config = dict()
 config['image_size'] = (448, 448)
+config['new_size'] = (448, 448)
 config['grid_size'] = (7, 7)
 config['n_boxes'] = 2
 config['classes'] = ['aeroplane', 'bicycle', 'boat', 'bus', 'car', 'motorbike', 'train', 'person', 'bird', 'cat', 'cow',
