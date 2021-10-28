@@ -1,10 +1,12 @@
 __all__ = ['YoloV1', 'YoloReshape']
 
 import tensorflow as tf
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Conv2D, BatchNormalization, LeakyReLU, MaxPooling2D, Input, Dense, Flatten, Dropout
 from tensorflow.keras.regularizers import l2
 import tensorflow.keras.backend as K
 import os
+import math
 
 from config import config
 
@@ -26,25 +28,30 @@ class YoloV1:
         x = LeakyReLU(alpha=0.1)(x)
         return x
 
-    def create_darknet(self, input_shape):
-        input_layer = Input(shape=(*input_shape, 3))
-        x = input_layer
+    @staticmethod
+    def add_fc_layers(x, output_shape=config['label_matrix']):
+        x = Dense(512, linear=False)(x)
+        x = Dense(4096, linear=False)(x)
+        x = Dropout(0.5)(x)
+        x = Dense(math.prod(output_shape), linear=True)(x)
+        return x
+
+    def create_darknet(self, x):
         for block in self.architecture:
             if block[0] == 'CNN':
                 x = self.cnn_block(x, *block[1:])
             elif block[0] == 'Max':
                 x = MaxPooling2D(pool_size=block[1], strides=block[2], padding=block[3])(x)
         x = Flatten()(x)
-        x = self.add_fc_layers(x)
         return x
 
-    @staticmethod
-    def add_fc_layers(x):
-        x = Dense(512, linear=False)(x)
-        x = Dense(5096, linear=False)(x)
-        x = Dropout(0.5)(x)
-        x = Dense(1470, linear=True)(x)
-        return x
+    def build_network(self, input_shape=config['new_size']):
+        input_layer = Input(shape=(*input_shape, 3))
+        cnn = self.create_darknet(input_layer)
+        fc = self.add_fc_layers(cnn)
+        out = YoloReshape()(fc)
+        model = Model(inputs=input_layer, outputs=out, name='YOLOV1')
+        return model
 
 
 class YoloReshape(tf.keras.layers):

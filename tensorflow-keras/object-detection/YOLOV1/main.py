@@ -3,7 +3,8 @@ from config import config
 from load_data import *
 
 
-def main():
+def main(dataset_path):
+    train_yolo()
     return
 
 
