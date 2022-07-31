@@ -7,9 +7,10 @@ config['grid_size'] = (7, 7)
 config['n_boxes'] = 2
 config['classes'] = ['aeroplane', 'bicycle', 'boat', 'bus', 'car', 'motorbike', 'train', 'person', 'bird', 'cat', 'cow',
                      'dog', 'horse', 'sheep', 'bottle', 'chair', 'dining table', 'potted plant', 'sofa', 'tv/monitor']
-config['class_map'] = {k: idx for idx, k in enumerate(config['classes'])}
-config['n_classes'] = len(config['classes'])
-config['output_shape'] = (config['grid_size'][0], config['grid_size'][1], config['n_boxes'] * 5 + config['n_classes'])
+config['class_map'] = {k: idx for idx, k in enumerate(config.get('classes'))}
+config['n_classes'] = len(config.get('classes'))
+config['output_shape'] = (config.get('grid_size')[0], config.get('grid_size')[1],
+                          config.get('n_boxes') * 5 + config.get('n_classes'))
 config['model_arch'] = [  # tuple : (block, kernel_size, filters, stride, padding)
     # tuple : (block, pool_size, stride_size, padding)
     ('CNN', 7, 64, 2, 'same'),
@@ -41,4 +42,3 @@ config['model_arch'] = [  # tuple : (block, kernel_size, filters, stride, paddin
     ('CNN', 3, 1024, 1, 'same'),
     ('CNN', 3, 1024, 1, 'same')
 ]
-
