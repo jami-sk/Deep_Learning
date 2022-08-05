@@ -3,3 +3,8 @@
 *.idea/*.iml
 *.xml
 tensorflow-keras/Object-detection/YOLOV1/.idea/workspace.xml
+*datasets/**
+**pretrained_models**
+
+
+
