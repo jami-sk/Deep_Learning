@@ -1,11 +1,8 @@
-*.idea
-*.idea/*.xml
-*.idea/*.iml
-*.xml
+**/.idea/**
+**.xml
 tensorflow-keras/Object-detection/YOLOV1/.idea/workspace.xml
-*datasets/**
+**/datasets/**
+**/weights/**
+**/runs/**
 **pretrained_models**
 **pytorch/01-Basics/01-Using-Existing-Models/yolov3**
-
-
-
