@@ -1,5 +1,6 @@
 # Usage
-# python translate.py -i <D:\Development\Deep_Learning\Image-Processing-Tools\Python\Sample-Images\Opencv-Logo.png>
+# python 03-translate.py -i <image path>
+# python 03-translate.py -i D:\Development\Deep_Learning\Image-Processing-Tools\Python\Sample-Images\Opencv-Logo.png
 
 import numpy as np
 import argparse
