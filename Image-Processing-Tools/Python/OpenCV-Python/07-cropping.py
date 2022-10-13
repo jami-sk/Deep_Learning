@@ -14,3 +14,9 @@ image = cv2.imread(args["image"])
 cv2.imshow("Loaded Image", image)
 
 
+crop = image[150:,:]
+cv2.imshow("OpenCV Text", crop)
+
+logo = image[:150,:]
+cv2.imshow("OpenCV Circles", logo)
+cv2.waitKey(0)
