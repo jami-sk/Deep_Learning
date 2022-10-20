@@ -2,7 +2,6 @@
 # python 23-histogram-matching.py -i <path to image>
 
 import argparse
-from ssl import match_hostname
 import cv2 
 import matplotlib.pyplot as plt
 from skimage import exposure
