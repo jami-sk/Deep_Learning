@@ -6,3 +6,7 @@ tensorflow-keras/Object-detection/YOLOV1/.idea/workspace.xml
 **/runs/**
 **pretrained_models**
 **pytorch/01-Basics/01-Using-Existing-Models/yolov3**
+**my_checkpoint**
+**events**
+**saved_model**
+**variables**
